@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
+import emoji
 import nltk
 from nltk.corpus import stopwords
 import torch
@@ -18,6 +19,16 @@ def cargar_modelos():
     # Descargar stopwords
     nltk.download('stopwords', quiet=True)
     stop_words_es = set(stopwords.words('spanish'))
+    
+    # Definimos las palabras cruciales que NO queremos que se borren
+    palabras_a_conservar = {
+        'no', 'ni', 'pero', 'aunque', 'sin', 'nada', 'nadie', 
+        'muy', 'poco', 'mas', 'más', 'sí', 'si', 'tampoco', 
+        'nunca', 'jamás', 'bien', 'mal', 'buen', 'bueno', 'malo', 'peor', 'mejor'
+    }
+    
+    # Retiramos estas palabras cruciales de la lista de eliminación
+    stop_words_es = stop_words_es - palabras_a_conservar
 
     # Cargar BETO
     tokenizer = AutoTokenizer.from_pretrained("dccuchile/bert-base-spanish-wwm-uncased")
@@ -30,14 +41,28 @@ def cargar_modelos():
 
 tokenizer_beto, model_beto, svm_clf, stop_words_es = cargar_modelos()
 
-# 3. Funciones de procesamiento (idénticas a las de tu entrenamiento)
+# 3. Funciones de procesamiento 
 def limpiar_texto(texto):
     texto = texto.lower()
+    
+    # Eliminar URLs, menciones y hashtags
     texto = re.sub(r'http\S+|www\S+|https\S+', '', texto, flags=re.MULTILINE)
     texto = re.sub(r'\@\w+|\#', '', texto)
-    texto = re.sub(r'[^\w\s]', '', texto)
+    
+    # Traducción de emojis (Vital para redes sociales)
+    texto = emoji.demojize(texto, language='es')
+    
+    # Reducción de caracteres repetidos y números
+    texto = re.sub(r'(.)\1{2,}', r'\1\1', texto)
+    texto = re.sub(r'\d+', '', texto)
+    
+    # Eliminar puntuación (conservando los guiones bajos de los emojis)
+    texto = re.sub(r'[^\w\s_]', '', texto)
+    
+    # Tokenización y eliminación de Stopwords filtradas
     tokens = texto.split()
     tokens_limpios = [word for word in tokens if word not in stop_words_es]
+    
     return " ".join(tokens_limpios)
 
 def aplicar_embeddings(texto_limpio):
