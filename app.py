@@ -1,9 +1,6 @@
 import streamlit as st
 import pandas as pd
 import re
-import emoji
-import nltk
-from nltk.corpus import stopwords
 import torch
 from transformers import AutoTokenizer, AutoModel
 import joblib
@@ -16,54 +13,42 @@ st.markdown("### Análisis de opiniones sobre la Senescyt y el sistema de admisi
 # 2. Caché para cargar los modelos pesados una sola vez y que la app sea rápida
 @st.cache_resource
 def cargar_modelos():
-    # Descargar stopwords
-    nltk.download('stopwords', quiet=True)
-    stop_words_es = set(stopwords.words('spanish'))
-    
-    # Definimos las palabras cruciales que NO queremos que se borren
-    palabras_a_conservar = {
-        'no', 'ni', 'pero', 'aunque', 'sin', 'nada', 'nadie', 
-        'muy', 'poco', 'mas', 'más', 'sí', 'si', 'tampoco', 
-        'nunca', 'jamás', 'bien', 'mal', 'buen', 'bueno', 'malo', 'peor', 'mejor'
-    }
-    
-    # Retiramos estas palabras cruciales de la lista de eliminación
-    stop_words_es = stop_words_es - palabras_a_conservar
-
-    # Cargar BETO
+    # Cargar BETO (Ya no descargamos NLTK ni stopwords)
     tokenizer = AutoTokenizer.from_pretrained("dccuchile/bert-base-spanish-wwm-uncased")
     model_beto = AutoModel.from_pretrained("dccuchile/bert-base-spanish-wwm-uncased")
 
     # Cargar tu SVM entrenado
     svm = joblib.load('clasificador_svm_beto.pkl')
 
-    return tokenizer, model_beto, svm, stop_words_es
+    return tokenizer, model_beto, svm
 
-tokenizer_beto, model_beto, svm_clf, stop_words_es = cargar_modelos()
+tokenizer_beto, model_beto, svm_clf = cargar_modelos()
 
-# 3. Funciones de procesamiento 
+# 3. Funciones de procesamiento (Optimizadas para BETO: preservando el contexto)
 def limpiar_texto(texto):
+    # 1. Convertir a minúsculas
     texto = texto.lower()
     
-    # Eliminar URLs, menciones y hashtags
+    # 2. Eliminar URLs
     texto = re.sub(r'http\S+|www\S+|https\S+', '', texto, flags=re.MULTILINE)
+    
+    # 3. Eliminar menciones y hashtags
     texto = re.sub(r'\@\w+|\#', '', texto)
     
-    # Traducción de emojis (Vital para redes sociales)
-    texto = emoji.demojize(texto, language='es')
-    
-    # Reducción de caracteres repetidos y números
+    # 4. Reducir letras repetidas (ej. "holaaa" -> "holaa")
     texto = re.sub(r'(.)\1{2,}', r'\1\1', texto)
+    
+    # 5. Eliminar números
     texto = re.sub(r'\d+', '', texto)
     
-    # Eliminar puntuación (conservando los guiones bajos de los emojis)
+    # 6. Eliminar puntuación extraña (conservando guiones bajos de los emojis)
     texto = re.sub(r'[^\w\s_]', '', texto)
     
-    # Tokenización y eliminación de Stopwords filtradas
-    tokens = texto.split()
-    tokens_limpios = [word for word in tokens if word not in stop_words_es]
+    # 7. Eliminar espacios dobles
+    texto = re.sub(r'\s+', ' ', texto).strip()
     
-    return " ".join(tokens_limpios)
+    # Retornamos la oración ENTERA sin borrar stopwords para no perder el contexto Neutral
+    return texto
 
 def aplicar_embeddings(texto_limpio):
     inputs = tokenizer_beto([texto_limpio], padding=True, truncation=True, return_tensors="pt", max_length=128)
@@ -96,5 +81,5 @@ if st.button("Analizar Sentimiento", type="primary"):
             elif prediccion == 2:
                 st.success("Sentimiento: **Positivo**")
 
-            with st.expander("Ver texto preprocesado (Tokenización)"):
+            with st.expander("Ver texto preprocesado (Limpieza)"):
                 st.code(texto_procesado)
