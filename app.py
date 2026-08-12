@@ -24,7 +24,7 @@ def cargar_modelos():
 
 tokenizer_beto, model_beto, svm_clf = cargar_modelos()
 
-# 3. Funciones de procesamiento (Optimizadas para BETO: preservando el contexto)
+# 3. Funciones de procesamiento (Optimizadas para BETO: preservando el contexto, puntuación y números)
 def limpiar_texto(texto):
     # 1. Convertir a minúsculas
     texto = texto.lower()
@@ -38,16 +38,17 @@ def limpiar_texto(texto):
     # 4. Reducir letras repetidas (ej. "holaaa" -> "holaa")
     texto = re.sub(r'(.)\1{2,}', r'\1\1', texto)
     
-    # 5. Eliminar números
-    texto = re.sub(r'\d+', '', texto)
+    # 5. Eliminar símbolos extraños, PERO conservar números, letras, y puntuación básica
+    # Conservamos: . , ; : ¡ ! ¿ ? y el guion bajo _
+    texto = re.sub(r'[^\w\s\.,;:¡!¿\?_]', '', texto)
     
-    # 6. Eliminar puntuación extraña (conservando guiones bajos de los emojis)
-    texto = re.sub(r'[^\w\s_]', '', texto)
+    # 6. Reducir múltiples signos de puntuación seguidos (ej. "!!!" -> "!")
+    texto = re.sub(r'([.,;:\?!¿¡])\1+', r'\1', texto)
     
     # 7. Eliminar espacios dobles
     texto = re.sub(r'\s+', ' ', texto).strip()
     
-    # Retornamos la oración ENTERA sin borrar stopwords para no perder el contexto Neutral
+    # Retornamos la oración ENTERA, con su gramática, puntuación y números intactos
     return texto
 
 def aplicar_embeddings(texto_limpio):
